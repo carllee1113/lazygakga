@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { DealResult } from '../lib/calculation'
 import { computeDeal } from '../lib/calculation'
-import { findLastByProductName, saveCalculation, getLatestPerProduct, getProductStats, updateByTimestamp } from '../lib/storage'
+import { findLastByProductNameAsync, saveCalculation, getLatestPerProductAsync, getProductStatsAsync, updateByTimestamp } from '../lib/storage'
 import type { ProductStats, SavedCalculation } from '../lib/storage'
 
 export default function Calculator({ prefill }: { prefill?: SavedCalculation }) {
@@ -40,15 +40,19 @@ export default function Calculator({ prefill }: { prefill?: SavedCalculation }) 
       setStats(null)
       return
     }
-    const prev = findLastByProductName(productName)
-    setPrevious(prev ? prev.result : null)
-    const s = getProductStats(productName)
-    setStats(s || null)
+    findLastByProductNameAsync(productName)
+      .then((prev) => setPrevious(prev ? prev.result : null))
+      .catch(() => setPrevious(null))
+    getProductStatsAsync(productName)
+      .then((s) => setStats(s || null))
+      .catch(() => setStats(null))
   }, [productName])
 
   // Load latest unique products (limit 10) for quick selection
   useEffect(() => {
-    setRecentItems(getLatestPerProduct(10))
+    getLatestPerProductAsync(10)
+      .then(setRecentItems)
+      .catch(() => setRecentItems([]))
   }, [])
 
   // Auto-calculate on input changes
@@ -102,8 +106,8 @@ export default function Calculator({ prefill }: { prefill?: SavedCalculation }) 
       saveCalculation(name, input, result)
     }
     // Refresh recent items list to latest unique products
-    setRecentItems(getLatestPerProduct(10))
-    setStats(getProductStats(name) || null)
+    getLatestPerProductAsync(10).then(setRecentItems).catch(() => {})
+    getProductStatsAsync(name).then((s) => setStats(s || null)).catch(() => {})
   }
 
   const clearAll = () => {

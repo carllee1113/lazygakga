@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getHistory, getLatestPerProduct } from '../lib/storage'
+import { getHistoryAsync } from '../lib/storage'
 import ProductPriceChart from './ProductPriceChart'
 import type { SavedCalculation } from '../lib/storage'
 
 export default function PriceHistory({ onEdit }: { onEdit?: (item: SavedCalculation) => void }) {
-  const [allItems, setAllItems] = useState(() => getHistory())
+  const [allItems, setAllItems] = useState<SavedCalculation[]>([])
 
   useEffect(() => {
     // Refresh when mounted
-    setAllItems(getHistory())
+    getHistoryAsync().then(setAllItems).catch((e) => {
+      console.warn('Failed to load history', e)
+    })
   }, [])
 
   const todayKey = new Date().toDateString()
@@ -25,7 +27,20 @@ export default function PriceHistory({ onEdit }: { onEdit?: (item: SavedCalculat
     return m
   }, [allItems])
   // Show latest unique products (limit 4), similar to Recent Saved
-  const uniqueLatestLimited = useMemo(() => getLatestPerProduct(4), [allItems])
+  const uniqueLatestLimited = useMemo(() => {
+    const seen = new Set<string>()
+    const sorted = [...allItems].sort((a, b) => b.timestamp - a.timestamp)
+    const out: SavedCalculation[] = []
+    for (const it of sorted) {
+      const key = nameKey(it.productName)
+      if (!seen.has(key)) {
+        seen.add(key)
+        out.push(it)
+        if (out.length >= 4) break
+      }
+    }
+    return out
+  }, [allItems])
 
   return (
     <div style={{ padding: 16 }}>

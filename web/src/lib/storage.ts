@@ -1,6 +1,7 @@
 import type { DealInput, DealResult } from './calculation'
 import { computeDeal } from './calculation'
 import type { BaseUnit } from './units'
+import { supabase, isSupabaseConfigured, TABLE_CALCULATIONS } from './supabase'
 
 export interface SavedCalculation {
   productName: string
@@ -10,6 +11,63 @@ export interface SavedCalculation {
 }
 
 const KEY = 'saved_calculations'
+
+// --- Supabase helpers ---
+async function supabaseLoad(): Promise<SavedCalculation[]> {
+  if (!isSupabaseConfigured) return load()
+  try {
+    const { data, error } = await supabase
+      .from(TABLE_CALCULATIONS)
+      .select('product_name, timestamp, input, result')
+      .order('timestamp', { ascending: false })
+    if (error) {
+      console.warn('Supabase load error', error)
+      return load()
+    }
+    const items: SavedCalculation[] = (data || []).map((row: any) => ({
+      productName: row.product_name,
+      timestamp: row.timestamp,
+      input: row.input,
+      result: row.result,
+    }))
+    return items
+  } catch (e) {
+    console.warn('Supabase load failed', e)
+    return load()
+  }
+}
+
+async function supabaseInsert(record: SavedCalculation): Promise<void> {
+  if (!isSupabaseConfigured) return
+  try {
+    const { error } = await supabase.from(TABLE_CALCULATIONS).insert({
+      product_name: record.productName,
+      timestamp: record.timestamp,
+      input: record.input,
+      result: record.result,
+    })
+    if (error) console.warn('Supabase insert error', error)
+  } catch (e) {
+    console.warn('Supabase insert failed', e)
+  }
+}
+
+async function supabaseUpdate(ts: number, record: SavedCalculation): Promise<void> {
+  if (!isSupabaseConfigured) return
+  try {
+    const { error } = await supabase
+      .from(TABLE_CALCULATIONS)
+      .update({
+        product_name: record.productName,
+        input: record.input,
+        result: record.result,
+      })
+      .eq('timestamp', ts)
+    if (error) console.warn('Supabase update error', error)
+  } catch (e) {
+    console.warn('Supabase update failed', e)
+  }
+}
 
 function load(): SavedCalculation[] {
   try {
@@ -46,11 +104,22 @@ export function saveCalculation(productName: string, input: DealInput, result: D
   // Append new record for this product, keeping historical entries for averages/ranges
   items.push(record)
   saveAll(items)
+  // Best-effort insert to Supabase (non-blocking)
+  supabaseInsert(record)
   return record
 }
 
 export function getHistory(): SavedCalculation[] {
   return load().sort((a, b) => b.timestamp - a.timestamp)
+}
+
+// Async variants using Supabase when configured
+export async function getHistoryAsync(): Promise<SavedCalculation[]> {
+  if (isSupabaseConfigured) {
+    const remote = await supabaseLoad()
+    return remote.sort((a, b) => b.timestamp - a.timestamp)
+  }
+  return getHistory()
 }
 
 // Return the latest record per normalized product name, sorted by recency.
@@ -77,6 +146,17 @@ export function findLastByProductName(name: string): SavedCalculation | undefine
     .sort((a, b) => b.timestamp - a.timestamp)[0]
 }
 
+export async function findLastByProductNameAsync(name: string): Promise<SavedCalculation | undefined> {
+  if (isSupabaseConfigured) {
+    const normalizedName = nameKey(name)
+    const items = await supabaseLoad()
+    return items
+      .filter((i) => nameKey(i.productName) === normalizedName)
+      .sort((a, b) => b.timestamp - a.timestamp)[0]
+  }
+  return findLastByProductName(name)
+}
+
 // Update a specific record by its timestamp (used when editing an entry)
 export function updateByTimestamp(ts: number, updated: SavedCalculation): void {
   const items = load()
@@ -85,6 +165,8 @@ export function updateByTimestamp(ts: number, updated: SavedCalculation): void {
     items[idx] = updated
     saveAll(items)
   }
+  // Best-effort remote update
+  supabaseUpdate(ts, updated)
 }
 
 export interface ProductStats {
@@ -161,6 +243,58 @@ export function getProductStats(name: string): ProductStats | null {
     }
   }
   return stats
+}
+
+export async function getProductStatsAsync(name: string): Promise<ProductStats | null> {
+  if (isSupabaseConfigured) {
+    const normalizedName = nameKey(name)
+    if (!normalizedName) return null
+    const items = (await supabaseLoad()).filter((i) => nameKey(i.productName) === normalizedName)
+    if (items.length === 0) return null
+
+    const itemPrices: number[] = []
+    const unitPricesG: number[] = []
+    const unitPricesMl: number[] = []
+
+    for (const it of items) {
+      const r = it.result
+      if (isFinite(r.pricePerItem)) itemPrices.push(r.pricePerItem)
+      const base = getPricePerBaseUnit(r)
+      if (base) {
+        if (base.baseUnit === 'g') unitPricesG.push(base.valuePerBase)
+        else unitPricesMl.push(base.valuePerBase)
+      }
+    }
+
+    const stats: ProductStats = { count: items.length }
+    if (itemPrices.length) {
+      const sum = itemPrices.reduce((a, b) => a + b, 0)
+      stats.itemPrice = {
+        avg: sum / itemPrices.length,
+        min: Math.min(...itemPrices),
+        max: Math.max(...itemPrices),
+      }
+    }
+    if (unitPricesG.length) {
+      const sum = unitPricesG.reduce((a, b) => a + b, 0)
+      stats.unitPrice = {
+        baseUnit: 'g',
+        avgBase: sum / unitPricesG.length,
+        minBase: Math.min(...unitPricesG),
+        maxBase: Math.max(...unitPricesG),
+      }
+    } else if (unitPricesMl.length) {
+      const sum = unitPricesMl.reduce((a, b) => a + b, 0)
+      stats.unitPrice = {
+        baseUnit: 'ml',
+        avgBase: sum / unitPricesMl.length,
+        minBase: Math.min(...unitPricesMl),
+        maxBase: Math.max(...unitPricesMl),
+      }
+    }
+    return stats
+  }
+  return getProductStats(name)
 }
 
 // --- Utilities for clearing and seeding local storage ---
@@ -241,5 +375,23 @@ export function seedFromFormattedLines(lines: string[]): SavedCalculation[] {
     }
   }
   saveAll(out)
+  // Also seed remote when configured (best effort)
+  out.forEach((r) => supabaseInsert(r))
   return out
+}
+
+// Async variant mirroring getLatestPerProduct but using Supabase
+export async function getLatestPerProductAsync(limit?: number): Promise<SavedCalculation[]> {
+  const items = await getHistoryAsync()
+  const seen = new Set<string>()
+  const result: SavedCalculation[] = []
+  for (const it of items) {
+    const key = nameKey(it.productName)
+    if (!seen.has(key)) {
+      seen.add(key)
+      result.push(it)
+      if (limit && result.length >= limit) break
+    }
+  }
+  return result
 }

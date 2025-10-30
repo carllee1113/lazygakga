@@ -1,4 +1,4 @@
-import React from 'react'
+// React 19 automatic JSX runtime; no import needed
 
 interface Point { time: number; value: number }
 

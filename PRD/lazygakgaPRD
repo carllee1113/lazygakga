@@ -1,0 +1,148 @@
+### **Revised PRD: Lazygakga (MVP)**
+
+#### 1. Vision & Core Problem
+*   **Vision:** To be the fastest and most intuitive pocket calculator for complex supermarket deals, helping shoppers instantly understand the true value of a promotion.
+*   **Core Problem:** Shoppers need to quickly convert promotional pricing (e.g., "2 for $19.90", "Family size 750g for $8.50") into simple, comparable units (price per item, price per gram, etc.).
+
+#### 2. MVP Core Feature: The Universal Deal Calculator
+This single feature will be the heart of the MVP. It's a specialized calculator interface designed for shopping scenarios.
+
+*   **User Inputs:** The user will manually key in the details of a product promotion.
+    *   **[Required] Total Price:** The shelf price (e.g., $19.90).
+    *   **[Required] Number of Items:** The quantity you get for that price (defaults to 1).
+    *   **[Optional] Weight/Volume per Item:** The size of a single item (e.g., 750).
+    *   **[Optional] Unit of Measurement:** A selector for the size (g, kg, ml, L).
+    *   **[Optional] Product Name:** A text field to label the calculation for future reference (e.g., "Brand X Coffee").
+
+*   **Calculated Outputs:** Upon hitting "Calculate," the app will instantly display a clear results summary showing:
+    1.  **Price per Item:** `Total Price / Number of Items`.
+    2.  **Price per Unit of Measurement:** e.g., Price per gram (`Total Price / Total Weight`).
+    3.  **Measurement per Dollar:** e.g., Weight per dollar (`Total Weight / Total Price`), showing how much "stuff" you get for your money.
+
+#### 3. Feature: Calculation History & Comparison
+*   **Description:** To make the calculator truly useful, users must be able to compare a new calculation with a previous one.
+*   **Requirements:**
+    *   **[F-3.1] Save Calculation:** After a calculation, a "Save" button will store the results, linked to the `Product Name` the user entered.
+    *   **[F-3.2] History List:** A simple screen showing a list of saved products.
+    *   **[F-3.3] Comparison Flow:**
+        *   When a user enters a `Product Name` that matches a saved item, the app will automatically show the *previous* calculation's results alongside the *new* results for an instant side-by-side comparison.
+
+---
+
+### **Revised User Experience (UX) Workflow**
+
+#### **Step 1: The Home Screen (Calculator)**
+*   The app opens directly to the **Universal Deal Calculator** interface. There are no extra steps.
+*   The screen is clean, with clearly labeled fields for `Price`, `Number of Items`, and the optional `Weight/Volume`.
+*   A prominent **[CALCULATE]** button sits at the bottom.
+*   A secondary button or tab labeled **[My Saved Items]** is visible.
+
+#### **Step 2: Performing a Calculation**
+*   **Scenario:** User sees a promotion: "2 bags of 750g coffee for $22."
+*   **Action:** The user inputs:
+    *   Product Name: `Brand X Coffee`
+    *   Total Price: `22`
+    *   Number of Items: `2`
+    *   Weight per Item: `750`
+    *   Unit: `g`
+*   They tap **[CALCULATE]**.
+
+#### **Step 3: The Results Screen**
+*   The screen immediately updates to show the results. This is not a new screen, but a smooth transition on the same page.
+*   **Visuals:**
+    *   **Price per bag:** $11.00
+    *   **Price per kilogram (kg):** $14.67/kg  *(The app is smart enough to convert 1500g to 1.5kg)*
+    *   **Weight per dollar:** 68.2g/$
+*   Below the results, two buttons appear: **[SAVE FOR LATER]** and **[CLEAR]**.
+
+#### **Step 4: Saving and Comparing**
+*   The user taps **[SAVE FOR LATER]**. The app saves "Brand X Coffee" with its calculated values.
+*   **Two weeks later...** a new sale is on. The user opens the app.
+*   They start typing `Brand X Coffee` into the Product Name field.
+*   **Auto-Complete/Suggestion:** The app recognizes the name and shows a small notification: "Comparing against your last price of $11.00/bag."
+*   The user enters the new deal (e.g., 1 bag for $12) and hits **[CALCULATE]**.
+*   **Comparison Results:** The results screen now shows two columns: "Today's Deal" vs. "Last Time," with clear visual cues (e.g., red/green arrows) indicating which is better value across all metrics.
+
+### **Next Phase (Post-MVP)**
+
+*   **Photo Scanning (OCR):** Introduce a camera button. The user takes a picture of a price tag or promotional poster. The app uses Optical Character Recognition (OCR) to read the numbers (`price`, `quantity`, `weight`) and automatically fill in the calculator fields for the user. This becomes a powerful "magic" feature that builds on the solid calculator foundation.
+
+To help you visualize the MVP's core screen, here is a UI component concept.
+
+````artifact
+id: lazy-calculator-ui
+name: Lazygakga Price Calculator
+type: tsx
+content: |-
+  import React from 'react';
+  import { Button } from "@/components/ui/button";
+  import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+  import { Input } from "@/components/ui/input";
+  import { Label } from "@/components/ui/label";
+  import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+  import { Calculator, ShoppingBag, Weight } from 'lucide-react';
+
+  const LazygakgaCalculator = () => {
+    return (
+      <div className="bg-slate-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="h-6 w-6" />
+              Lazygakga Deal Calculator
+            </CardTitle>
+            <CardDescription>Enter the promotion details to see the real value.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="product-name">Product Name (Optional)</Label>
+              <Input id="product-name" placeholder="e.g., Brand X Coffee" />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="total-price">Total Price ($)</Label>
+                <Input id="total-price" type="number" placeholder="19.90" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="item-count">Number of Items</Label>
+                <Input id="item-count" type="number" placeholder="2" defaultValue="1" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2"><Weight className="h-4 w-4" /> Optional: Add Weight or Volume</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="measurement-value" className="text-xs text-gray-500">Value (per item)</Label>
+                  <Input id="measurement-value" type="number" placeholder="750" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="measurement-unit" className="text-xs text-gray-500">Unit</Label>
+                  <Select>
+                    <SelectTrigger id="measurement-unit">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="g">Grams (g)</SelectItem>
+                      <SelectItem value="kg">Kilograms (kg)</SelectItem>
+                      <SelectItem value="ml">Milliliters (ml)</SelectItem>
+                      <SelectItem value="l">Liters (L)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button className="w-full">
+              Calculate
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  };
+
+  export default LazygakgaCalculator;
+````
